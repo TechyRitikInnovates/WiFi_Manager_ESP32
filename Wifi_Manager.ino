@@ -4,6 +4,7 @@
 
 const char* apSSID = "AQD-ESP01";
 const char* apPassword = "12345678";
+const int resetPin = 5; // GPIO 5
 
 WebServer server(80);
 Preferences preferences;
@@ -75,6 +76,9 @@ void handleSubmit() {
 void setup() {
   Serial.begin(115200);
 
+  // Setup the reset pin
+  pinMode(resetPin, INPUT_PULLUP);
+
   preferences.begin("wifi", true);
   String storedSSID = preferences.getString("ssid", "");
   String storedPassword = preferences.getString("password", "");
@@ -104,6 +108,31 @@ void setup() {
   }
 
   // Start AP mode if no stored credentials or failed to connect
+  startAPMode();
+}
+
+void loop() {
+  server.handleClient();
+
+  // Check if the reset button is held down
+  static unsigned long buttonPressTime = 0;
+  if (digitalRead(resetPin) == LOW) {
+    if (buttonPressTime == 0) {
+      buttonPressTime = millis();
+    } else if (millis() - buttonPressTime > 5000) {
+      // Button held for more than 5 seconds, reset the Wi-Fi credentials
+      preferences.begin("wifi", false);
+      preferences.clear();
+      preferences.end();
+      Serial.println("Wi-Fi credentials erased. Restarting in AP mode...");
+      ESP.restart();
+    }
+  } else {
+    buttonPressTime = 0;
+  }
+}
+
+void startAPMode() {
   WiFi.softAP(apSSID, apPassword);
   Serial.println("Access Point started");
   Serial.print("AP IP Address: ");
@@ -113,8 +142,4 @@ void setup() {
   server.on("/submit", HTTP_POST, handleSubmit);
   server.begin();
   Serial.println("HTTP server started");
-}
-
-void loop() {
-  server.handleClient();
 }
